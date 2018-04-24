@@ -74,18 +74,18 @@ class Pair:
             price=price, precision=self.info['baseAssetPrecision']
         ))
 
-    def correct_volume(self, volume):
+    def correct_quantity(self, quantity):
         # Кратность шагу
-        volume = volume - volume % Decimal(self.info['filters'][1]['stepSize'])
+        quantity = quantity - quantity % Decimal(self.info['filters'][1]['stepSize'])
         # Точность по паре
-        return Decimal('{volume:0.{precision}f}'.format(
-            volume=volume, precision=self.info['baseAssetPrecision']
+        return Decimal('{quantity:0.{precision}f}'.format(
+            quantity=quantity, precision=self.info['baseAssetPrecision']
         ))
 
-    def volume_allowed(self, volume):
-        min_volume = Decimal(self.info['filters'][1]['minQty'])
-        max_volume = Decimal(self.info['filters'][1]['maxQty'])
-        return volume >= min_volume and volume <= max_volume
+    def quantity_allowed(self, quantity):
+        quantity = Decimal(self.info['filters'][1]['minQty'])
+        quantity = Decimal(self.info['filters'][1]['maxQty'])
+        return quantity >= quantity and quantity <= quantity
 
     def price_allowed(self, price):
         min_price = Decimal(self.info['filters'][0]['minPrice'])
@@ -101,10 +101,10 @@ class Pair:
         for indicator in self.indicators.values():
             await indicator.stop()
 
-    async def on_trade_signal(self, signal, indicator, price):
+    async def on_trade_signal(self, indicator, side, price):
         price = self.correct_price(price)
         if self.price_allowed(price):
-            await self.TRADE.emit(signal, self, price)
+            await self.TRADE.emit(self, side, price)
         else:
             self.log.warning('Price %s not allowed', price)
 

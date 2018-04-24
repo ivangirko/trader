@@ -2,29 +2,34 @@ import logging
 from decimal import Decimal
 from collections import namedtuple
 
-from .order import Order
+from trader.api import ApiError
 
 
 class Account:
 
-    Balance = namedtuple('Balance', ['free', 'locked'])
-
-
-
     log = logging.getLogger('Account')
+    Balance = namedtuple('Balance', ['free', 'locked'])
+    Order = namedtuple('Order', ['id',
+                                 'pair',
+                                 'status',
+                                 'type',
+                                 'side',
+                                 'price',
+                                 'quantity',
+                                 'stop_price',
+                                 'time'])
 
     def __init__(self, stock):
         self.stock = stock
         self.info = None
         self.balances = {}
+        self.orders = {}
 
     async def start(self):
         # Получаем информацию об аккаунте
         await self.update_account_info()
+        # await self.load_opened_orders()
 
-        res = await self.opened_orders()
-
-        print (res)
     async def update_account_info(self):
         self.info = await self.stock.account()
 
@@ -36,30 +41,55 @@ class Account:
                               i['asset'], balance.free, balance.locked)
             self.balances[i['asset']] = balance
 
-    async def on_trade_signal(self, signal, pair, price):
+    async def on_trade_signal(self, pair, side, price):
         # Здесь код, который определяет количество
-        volume = Decimal('1')
+        quantity = Decimal('1')
 
         # Корректируем объем в соответствии с условиями биржи
-        volume = pair.correct_volume(volume)
-        if pair.volume_allowed(volume):
+        quantity = pair.correct_quantity(quantity)
+        if pair.quantity_allowed(quantity):
             self.log.info('%sING %s %s at the rate of %s per %s (total %s %s)',
-                          signal,
-                          volume, pair.quote, price, pair.base,
-                          volume * price, pair.base)
+                          side,
+                          quantity, pair.quote, price, pair.base,
+                          quantity * price, pair.base)
             # И создаем ордер
-            await self.create_order(signal, pair, price, volume)
+            try:
+                order = await self.create_order(pair.name, side, 'LIMIT',
+                                                price, quantity)
+                self.orders[order.id] = order
+                self.log.info('DONE')
+            except ApiError as err:
+                self.log.error('Error create order: %s[%s] - %s',
+                               err.status, err.code, err.msg)
         else:
-            self.log.warning('Volume %s not allowed', volume)
+            self.log.warning('Quantity %s not allowed', quantity)
 
-    async def create_order(self, signal, pair, price, volume, otype='LIMIT'):
+    async def create_order(self, pair_name, side, type, price, volume, **kw):
         # Создать ордер. (weight 1)
-        order = Order(self.stock, pair=pair, side=signal, type=otype,
-                      price=str(price), quantity=str(volume))
+        params = {
+            'symbol': pair_name,
+            'side': side,
+            'type': type,
+            'price': str(price),
+            'quantity': str(volume),
+        }
+        kw.setdefault('timeInForce', 'GTC')
+        kw.setdefault('newOrderRespType', 'RESULT')
+        kw.setdefault('recvWindow', 5000)
+        params.update(kw)
+        res = await self.stock.createOrder(**params)
 
-        await order.create()
-        return order
+        return Order(id=res['orderId'],
+                     pair=pair.name,
+                     status=res['status'],
+                     type=res['type'],
+                     side=res['side'],
+                     price=res['price'],
+                     quantity=res['executedQty'],
+                     stop_price=kw['stopPrice'],
+                     time=res['transactTime'])
 
-    async def opened_orders(self):
-        # return await self.stock.openOrders()
-        pass
+    async def load_opened_orders(self):
+        orders = await self.stock.openOrders()
+        for i in orders:
+            order = Order(self.stock, **i)

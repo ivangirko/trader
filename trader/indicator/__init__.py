@@ -6,7 +6,7 @@ from trader.lib.sig_slot import SigSlot
 
 class BaseIndicator:
 
-    class SIGNAL:
+    class SIDE:
         BUY = 'BUY'
         SELL = 'SELL'
 

@@ -31,10 +31,10 @@ class MACD(BaseIndicator):
         # self.log.info(res)
 
 
-        # signal = self.SIGNAL.BUY
-        # price = Decimal('12.000001232')
-        # self.log.info('%s signal(%s)', signal, price)
-        # await self.TRADE.emit(signal, self, price)
+        side = self.SIDE.BUY
+        price = Decimal('0.00000201')
+        self.log.info('%s side(%s)', side, price)
+        await self.TRADE.emit(self, side, price)
 
     async def stop(self):
         await super().stop()

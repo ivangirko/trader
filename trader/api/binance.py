@@ -5,7 +5,7 @@ import urllib.parse
 
 import aiohttp
 
-from . import BaseStock
+from . import BaseStock, ApiError
 
 
 class Binance(BaseStock):
@@ -64,4 +64,7 @@ class Binance(BaseStock):
             method = getattr(session, self.methods[cmd]['method'].lower())
             async with method(api_url,
                               params=payload, headers=headers) as resp:
-                return await resp.json()
+                res = await resp.json()
+                if resp.status != 200:
+                    raise ApiError(status=resp.status, **res)
+                return res

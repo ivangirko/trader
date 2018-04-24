@@ -1,6 +1,13 @@
 import logging
 
 
+class ApiError(Exception):
+
+    def __init__(self, **kw):
+        for k, v in kw.items():
+            setattr(self, k, v)
+
+
 class BaseStock:
 
     def __init__(self, api_key, api_secret):
