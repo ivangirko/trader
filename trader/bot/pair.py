@@ -5,6 +5,11 @@ from collections import namedtuple
 from trader.lib.sig_slot import SigSlot
 from trader.indicator import create_indicator
 
+
+class TradeConditionError(Exception):
+    pass
+
+
 class Pair:
 
     INTERVAL = {
@@ -60,6 +65,26 @@ class Pair:
     def name(self):
         return str(self)
 
+    @property
+    def min_price(self):
+        return Decimal(self.info['filters'][0]['minPrice'])
+
+    @property
+    def max_price(self):
+        return Decimal(self.info['filters'][0]['maxPrice'])
+
+    @property
+    def min_quantity(self):
+        return Decimal(self.info['filters'][1]['minQty'])
+
+    @property
+    def max_quantity(self):
+        return Decimal(self.info['filters'][1]['maxQty'])
+
+    @property
+    def min_notional(self):
+        return Decimal(self.info['filters'][2]['minNotional'])
+
     def _create_indicators(self, indicators):
         for indicator_name in indicators:
             indicator = create_indicator(indicator_name, self)
@@ -82,15 +107,29 @@ class Pair:
             quantity=quantity, precision=self.info['baseAssetPrecision']
         ))
 
-    def quantity_allowed(self, quantity):
-        quantity = Decimal(self.info['filters'][1]['minQty'])
-        quantity = Decimal(self.info['filters'][1]['maxQty'])
-        return quantity >= quantity and quantity <= quantity
+    def check_price(self, price):
+        if price < self.min_price or price > self.max_price:
+            raise TradeConditionError(
+                'price {} has to between [{}-{}]'.format(
+                    price, self.min_price, self.max_price
+                )
+            )
 
-    def price_allowed(self, price):
-        min_price = Decimal(self.info['filters'][0]['minPrice'])
-        max_price = Decimal(self.info['filters'][0]['maxPrice'])
-        return price >= min_price and price <= max_price
+    def check_quantity(self, quantity):
+        if quantity < self.min_quantity or quantity > self.max_quantity:
+            raise TradeConditionError(
+                'quantity {} has to be between [{}-{}]'.format(
+                    quantity, self.min_quantity, self.max_quantity
+                )
+            )
+
+    def check_notional(self, notional):
+        if notional < self.min_notional:
+            raise TradeConditionError(
+                'notional {} has to be upper {}'.format(
+                    notional, self.min_notional
+                )
+            )
 
     async def start(self, info):
         self.info = info
@@ -102,11 +141,12 @@ class Pair:
             await indicator.stop()
 
     async def on_trade_signal(self, indicator, side, price):
-        price = self.correct_price(price)
-        if self.price_allowed(price):
+        try:
+            price = self.correct_price(price)
+            self.check_price(price)
             await self.TRADE.emit(self, side, price)
-        else:
-            self.log.warning('Price %s not allowed', price)
+        except TradeConditionError as err:
+            self.log.warning('Invalid price: %s', err)
 
     # Сдесь описано API
     async def depth(self, limit=100):

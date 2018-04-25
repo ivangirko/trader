@@ -26,7 +26,7 @@ def run(cfg):
 
 def main():
     logging.basicConfig(
-        format='%(asctime)-15s %(levelname)-10s %(name)-30s %(message)s',
+        format='%(asctime)-15s %(levelname)-10s %(name)-20s %(message)s',
         level=logging.INFO
     )
 
